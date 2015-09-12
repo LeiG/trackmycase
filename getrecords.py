@@ -9,18 +9,30 @@ import os
 import time
 import sqlite3
 import random
+import urllib2
 from bs4 import BeautifulSoup, Comment
 from mechanize import Browser
 from dateutil.parser import parse
 
 ADDRESS = 'https://egov.uscis.gov/casestatus/mycasestatus.do'
 
+def loaduseragents(uafile = 'user_agents.txt'):
+    '''Load multiple user agents from a text file.'''
+    useragents = []
+    with open(uafile, 'rb') as uaf:
+        for ua in uaf.readlines():
+            if ua:
+                useragents.append(ua.strip()[1:-1-1])
+    random.shuffle(useragents)
+    return useragents
+
+
 class Crawler:
-    # initialize the crawler with
     def __init__(self, dbname, address = ADDRESS):
         self.con = sqlite3.connect(dbname)
+        self.url = ADDRESS
+        self.useragents = loaduseragents()
         self.browser = Browser()
-        self.browser.open(address)
 
     def __del__(self):
         self.con.close()
@@ -30,6 +42,13 @@ class Crawler:
 
     def getcontent(self, id):
         '''Get contents from html page for given case id.'''
+        # randomize headers
+        useragent = random.choice(self.useragents)
+        header = {"Connection": "close", "User-Agent": useragent}
+
+        # estabish connection
+        request = urllib2.Request(self.url, None, header)
+        self.browser.open(request)
         self.browser.select_form(nr = 0)
         self.browser['appReceiptNum'] = id
 
@@ -132,7 +151,7 @@ class Crawler:
         '''Update an existing case with new status and date.'''
         s = ["received", "approved", "mailed",
              "requested", "rejected", "unrecognized"]
-        self.con.execute('UPDATE caselist SET status = {0}, {1} = "{2}", \
+        self.con.execute('UPDATE caselist SET status = {0}, {1} = "{2}" \
                     WHERE caseid = "{3}"'.format(status, s[status], date, id))
 
     def addtodb(self, id, form, status, date):
@@ -157,18 +176,22 @@ class Crawler:
                 if numid - int(startid[3:]) > thres:
                     break
 
-            # sleep between 11 - 15 seconds
-            time.sleep(10 + random.randint(1, 5))
-            # suspend every 10 records
+            # commit every 10 records
             if numid % 10 == 0:
                 self.dbcommit()
-                # time.sleep(random.randint(10, 15))
 
             if self.isfinished(charid + str(numid)):
                 continue
 
-            id, form, status, date = self.getinfo(charid + str(numid))
-            numid += 1
+            # sleep between 1 - 5 seconds
+            time.sleep(random.randint(1, 5))
+
+            try:
+                id, form, status, date = self.getinfo(charid + str(numid))
+                numid += 1
+            except urllib2.URLError:
+                time.sleep(10)
+                continue
 
             # if case in db, check to see if it needs Update
             # otherwise, check if need to add to db
