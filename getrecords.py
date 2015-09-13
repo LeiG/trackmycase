@@ -174,6 +174,7 @@ class Crawler:
             # if only interested in a fixed amount of cases
             if thres != None:
                 if numid - int(startid[3:]) > thres:
+                    self.dbcommit()
                     break
 
             # commit every 10 records
@@ -184,7 +185,7 @@ class Crawler:
                 continue
 
             # sleep between 1 - 5 seconds
-            time.sleep(random.randint(1, 5))
+            time.sleep(10 + random.randint(1, 5))
 
             try:
                 id, form, status, date = self.getinfo(charid + str(numid))
@@ -208,9 +209,9 @@ class Crawler:
                     continue
             # check if no more cases available
             else:
+                self.dbcommit()
                 break
 
-        self.dbcommit()
 
     def createtable(self):
         '''Create the table for database.'''
@@ -228,4 +229,4 @@ if __name__ == "__main__":
     crawler = Crawler(dbname)
     if not os.path.isfile(dbname):
         crawler.createtable()
-    crawler.crawl('WAC1590446319', 10000)
+    crawler.crawl('WAC1590446319')
